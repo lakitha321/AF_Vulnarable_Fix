@@ -1,26 +1,69 @@
 const express = require('express');
+const helmet = require('helmet');
 const mongoose = require('mongoose');
 const bodyParser = require('body-parser');
+const csrf = require('csurf');
+const cookieParser = require('cookie-parser');
 const cors = require('cors');
 const app = express();
 require('dotenv').config();
 
-const personRouter = require("./routes/persons");
 const studentRouter = require("./routes/students");
-const staffRouter = require("./routes/staffs");
-const adminRouter = require("./routes/admins");
-const submissionRouter = require("./routes/submissions");
-const studentSubmissionRouter = require("./routes/studentSubmissions");
-const fileRoute = require("./routes/templates");
-const groupRoute = require("./routes/studentgroups");
-const requestRoute = require("./routes/requests");
-const chat = require("./routes/chats");
-const panel = require("./routes/panels");
 
 const PORT = process.env.PORT || 8070;
 
-app.use(cors());
-app.use(bodyParser.json());
+// Configure CSP (Content-Security-Policy)
+const cspConfig = {
+  directives: {
+    defaultSrc: ["'self'"],
+    scriptSrc: ["'self'", "trusted-scripts.example.com"],
+    frameAncestors: ["'none'"], // CSP with frame-ancestors directive
+  },
+};
+
+// Define a list of allowed origins (domains)
+const allowedOrigins = ['http://localhost:3000/', 'https://localhost:8081/'];
+
+app.use(helmet.contentSecurityPolicy(cspConfig));
+
+app.use(helmet.xssFilter());
+
+// Set X-Frame-Options header to SAMEORIGIN
+app.use((req, res, next) => {
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  next();
+});
+
+// app.use(cors());
+// Configure CORS middleware with the allowed origins
+app.use(cors({
+  origin: function (origin, callback) {
+    if (allowedOrigins.indexOf(origin) !== -1 || !origin) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+}));
+
+// Suppress the X-Powered-By header
+app.disable('x-powered-by');
+
+// Configure X-Content-Type-Options header
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  next();
+});
+
+// Middleware for parsing cookies and request bodies
+app.use(cookieParser());
+app.use(bodyParser.urlencoded({ extended: true }));
+
+// Initialize csurf middleware
+const csrfProtection = csrf({ cookie: true });
+
+// Use csrfProtection middleware for all routes
+app.use(csrfProtection);
 
 const URI = process.env.MONGODB_URL;
 
@@ -36,17 +79,7 @@ connection.once("open", () => {
   console.log('MongoDB Connection Success!!!')
 });
 
-app.use("/person", personRouter);
 app.use("/student", studentRouter);
-app.use("/staff", staffRouter);
-app.use("/admin", adminRouter);
-app.use("/submission", submissionRouter);
-app.use("/studentsubmission", studentSubmissionRouter);
-app.use("/assignment", fileRoute);
-app.use("/studentgroup", groupRoute);
-app.use("/request", requestRoute);
-app.use("/chat", chat);
-app.use("/panel", panel);
 
 app.listen(PORT, () => {
   console.log(`Server is up and running at port no: ${PORT}`)
